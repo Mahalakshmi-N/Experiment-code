@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EXP</title>
+    <style>
+        body {
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        #canvas {
+            border: 1px solid black;
+        }
+        #response {
+            display: none;
+        }
+        table { 
+            margin-top: 20px; 
+            border-collapse: collapse; 
+        }
+        th, td { 
+            border: 1px solid black;
+            padding: 8px; 
+            text-align: center; 
+        }
+        #switchMessage {
+            display: none;
+            font-size: 1.2em;
+            margin: 20px;
+            color: green;
+        }
+        #switchButton {
+            display: none;
+            padding: 10px 20px;
+            font-size: 1em;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<h2>Enter Participant Name:</h2>
+<input type="text" id="participantName" placeholder="Enter your name" />
+<button id="nameSubmitButton">Submit Name</button>
+
+<div id="experimentArea" style="display: none;">
+    <h2>Choose Background Color:</h2>
+    <button onclick="startExperiment('white')">White Background</button>
+    <button onclick="startExperiment('black')">Black Background</button>
+</div>
+
+<div id="switchMessage"></div>
+<button id="switchButton" onclick="startNextCondition()"></button>
+
+<div id="trialArea" style="display: none;">
+    <canvas id="canvas" width="800" height="600"></canvas>
+    <div id="response">
+        <button onclick="recordResponse('left')">Left</button>
+        <button onclick="recordResponse('right')">Right</button>
+        <button onclick="recordResponse('none')">Nothing</button>
+    </div>
+</div>
+
+<button onclick="downloadCSV()" id="downloadButton" style="display: none;">Download Results</button>
+
+<script>
+    const DOT_COUNT = 100;
+    const SPEED_LEVELS = [0.1, 0.2, 0.3];
+    const TOTAL_TRIALS = 10;
+    const trials = [];
+    let results = [];
+    let currentTrial = 0;
+    let dots = [];
+    let trialStartTime;
+    let interval;
+    let correctResponseType;
+    let currentSpeed;
+    let participantName = '';
+    let allResults = [];
+    let currentBackground = '';
+    let conditionCompleted = 0;
+
+    document.getElementById('nameSubmitButton').onclick = () => {
+        participantName = document.getElementById('participantName').value;
+        if (participantName) {
+            document.getElementById('experimentArea').style.display = 'block';
+            document.getElementById('participantName').style.display = 'none';
+            document.getElementById('nameSubmitButton').style.display = 'none';
+        } else {
+            alert("Please enter your name.");
+        }
+    };
+
+    function startExperiment(color) {
+        currentBackground = color;
+        setExperimentBackground(color);
+        createBalancedTrials();
+        showTrial();
+        document.getElementById('experimentArea').style.display = 'none';
+        document.getElementById('trialArea').style.display = 'block';
+    }
+
+    function setExperimentBackground(color) {
+        const body = document.body;
+        body.style.backgroundColor = color;
+        if (color === 'white') {
+            body.style.color = 'black';
+            document.getElementById('canvas').style.border = '1px solid black';
+        } else {
+            body.style.color = 'white';
+            document.getElementById('canvas').style.border = '1px solid white';
+        }
+    }
+
+    function createBalancedTrials() {
+        trials.length = 0;
+        for (let i = 0; i < 2; i++) {
+            trials.push('left');
+            trials.push('right');
+            trials.push('none');
+        }
+        trials.sort(() => Math.random() - 0.5);
+    }
+
+    function createDots(condition) {
+        dots = [];
+        for (let i = 0; i < DOT_COUNT; i++) {
+            dots.push({ x: Math.random() * 800, y: Math.random() * 600, color: 'red', direction: 0 });
+        }
+        const blueDotCount = Math.floor(DOT_COUNT * 0.5);
+        for (let i = 0; i < blueDotCount; i++) {
+            const direction = condition === 'none' ? 0 : (condition === 'left' ? -1 : 1);
+            dots.push({ x: Math.random() * 800, y: Math.random() * 600, color: 'blue', direction });
+        }
+        correctResponseType = condition === 'left' ? 'left' : (condition === 'right' ? 'right' : 'none');
+    }
+
+    function drawDots() {
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        dots.forEach(dot => {
+            ctx.beginPath();
+            ctx.arc(dot.x, dot.y, 5, 0, Math.PI * 2);
+            ctx.fillStyle = dot.color;
+            ctx.fill();
+        });
+    }
+
+    function moveDots(speed) {
+        dots.forEach(dot => {
+            if (dot.direction !== 0) {
+                dot.x += dot.direction * speed;
+                if (dot.x < 0) dot.x = 0;
+                if (dot.x > 800) dot.x = 800;
+            }
+        });
+    }
+
+    function showTrial() {
+        const currentCondition = trials[currentTrial];
+        createDots(currentCondition);
+        drawDots();
+        trialStartTime = Date.now();
+        currentSpeed = SPEED_LEVELS[Math.floor(Math.random() * SPEED_LEVELS.length)];
+        interval = setInterval(() => {
+            moveDots(currentSpeed);
+            drawDots();
+        }, 100);
+        document.getElementById('response').style.display = 'block';
+    }
+
+    function recordResponse(response) {
+        clearInterval(interval);
+        const responseTime = Date.now() - trialStartTime;
+        const isCorrect = (response === 'left' && correctResponseType === 'left') || 
+                          (response === 'right' && correctResponseType === 'right') ||
+                          (response === 'none' && correctResponseType === 'none');
+
+        const result = {
+            trial: currentTrial + 1,
+            condition: correctResponseType,
+            response,
+            correct: isCorrect,
+            responseTime,
+            speed: currentSpeed,
+            backgroundColor: currentBackground,
+            name: participantName
+        };
+
+        results.push(result);
+        allResults.push(result);
+
+        currentTrial++;
+
+        if (currentTrial >= TOTAL_TRIALS) {
+            endCondition();
+            return;
+        }
+
+        showTrial();
+    }
+
+    function endCondition() {
+        conditionCompleted++;
+        document.getElementById('trialArea').style.display = 'none';
+
+        if (conditionCompleted < 2) {
+            displaySwitchOption();
+        } else {
+            document.getElementById('downloadButton').style.display = 'block';
+        }
+    }
+
+    function displaySwitchOption() {
+        currentTrial = 0;
+        results = [];
+        currentBackground = currentBackground === 'white' ? 'black' : 'white';
+        document.getElementById('switchButton').innerText = `Switch to next condition: ${currentBackground} background`;
+        document.getElementById('switchButton').style.display = 'block';
+    }
+
+    function startNextCondition() {
+        document.getElementById('switchButton').style.display = 'none';
+        setExperimentBackground(currentBackground);
+        startExperiment(currentBackground);
+    }
+
+    function downloadCSV() {
+        const csvRows = [];
+        const headers = ['Trial', 'Condition', 'Response', 'Correct', 'Response Time (ms)', 'Speed', 'Background Color', 'Participant Name'];
+        csvRows.push(headers.join(','));
+        allResults.forEach(result => {
+            csvRows.push([result.trial, result.condition, result.response, result.correct ? 'Yes' : 'No', result.responseTime, result.speed, result.backgroundColor, result.name].join(','));
+        });
+        const csvString = csvRows.join('\n');
+        const blob = new Blob([csvString], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.setAttribute('href', url);
+        a.setAttribute('download', 'results.csv');
+        a.click();
+    }
+</script>
+
+</body>
+</html>
